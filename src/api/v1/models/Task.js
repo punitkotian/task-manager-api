@@ -15,7 +15,7 @@ const TaskSchema = new Schema(
     workspace: {
       type: Schema.Types.ObjectId,
       ref: "Workspace",
-      requried: true,
+      required: true,
     },
     project: {
       type: Schema.Types.ObjectId,

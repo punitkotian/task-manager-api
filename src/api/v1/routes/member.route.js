@@ -15,32 +15,38 @@ const {
   addMemberSchema,
   getWorkspaceMemberSchema,
   getWorkspaceMembersSchema,
+  removeWorkspaceMemberSchema,
 } = require("../validators/member.validator");
 
 router.get(
   "/",
   authenticateToken,
   validate(getWorkspaceMembersSchema),
-  getWorkspaceMembers
+  getWorkspaceMembers,
 );
 router.put(
   "/",
   authenticateToken,
   validate(addMemberSchema),
-  addMemberToWorkspace
+  addMemberToWorkspace,
 );
 router.get(
   "/:memberId",
   authenticateToken,
   validate(getWorkspaceMemberSchema),
-  getWorkspaceMember
+  getWorkspaceMember,
 );
 router.put(
   "/:memberId",
   authenticateToken,
   validate(updateMemberSchema),
-  updateMemberOfWorkspace
+  updateMemberOfWorkspace,
 );
-router.delete("/:memberId", authenticateToken, removeMemberFromWorkspace);
+router.delete(
+  "/:memberId",
+  authenticateToken,
+  validate(removeWorkspaceMemberSchema),
+  removeMemberFromWorkspace,
+);
 
 module.exports = router;

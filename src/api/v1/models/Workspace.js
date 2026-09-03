@@ -21,7 +21,7 @@ const WorkspaceSchema = new Schema(
       type: String,
     },
   },
-  { timeStamp: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("Workspace", WorkspaceSchema);

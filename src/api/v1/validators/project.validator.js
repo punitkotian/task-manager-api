@@ -31,8 +31,8 @@ const createProjectSchema = {
 
 const getProjectSchema = {
   params: z.object({
-    projectId: mongoIdSchema,
     workspaceId: mongoIdSchema,
+    projectId: mongoIdSchema,
   }),
 };
 

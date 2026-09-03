@@ -14,7 +14,7 @@ const nameSchema = z
   .max(50, "Name cannot exceed 50 characters")
   .regex(
     /^[a-zA-Z0-9\s_-]+$/,
-    "Only letters, numbers, spaces, hyphens, and underscores are allowed."
+    "Only letters, numbers, spaces, hyphens, and underscores are allowed.",
   );
 
 const descriptionSchema = z
@@ -32,7 +32,13 @@ const tagsSchema = z
   .optional();
 
 const dateOrNullSchema = z
-  .preprocess((val) => (val ? new Date(val) : null), z.date().nullable())
+  .preprocess((value) => {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+
+    return new Date(value);
+  }, z.date().nullable())
   .optional();
 
 const createTaskSchema = {
@@ -94,7 +100,7 @@ const updateTaskSchema = {
 const getTaskSchema = {
   params: z.object({
     workspaceId: mongoIdSchema,
-    taskId: mongoIdSchema, 
+    taskId: mongoIdSchema,
   }),
 };
 

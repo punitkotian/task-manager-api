@@ -2,20 +2,26 @@ const { z } = require("zod");
 
 const usernameSchema = z
   .string()
+  .trim()
   .min(3)
   .max(30)
   .regex(
     /^[a-zA-Z0-9_]+$/,
-    "Username can only contain letters, numbers, and underscores"
+    "Username can only contain letters, numbers, and underscores",
   );
 
-const emailSchema = z.string().email();
+const emailSchema = z
+  .string()
+  .trim()
+  .email("Invalid email address")
+  .transform((email) => email.toLowerCase());
+
 const passwordSchema = z
   .string()
   .min(8)
   .regex(
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])/,
-    "Password must contain at least one lowercase, uppercase, number, and special character"
+    "Password must contain at least one lowercase, uppercase, number, and special character",
   );
 
 const registerSchema = {
@@ -43,7 +49,7 @@ const updateUserSchema = {
     .strict()
     .refine(
       (data) => Object.keys(data).length > 0,
-      "At least one field required"
+      "At least one field required",
     ),
 };
 
