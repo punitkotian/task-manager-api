@@ -23,10 +23,10 @@ app.use(notFoundHandler);
 app.use(errorHanlder);
 (async () => {
   try {
-    await connectToDB(); 
+    await connectToDB();
     app.listen(PORT, () => {
       console.log(
-        `Server is running on port ${PORT}\nLink: http://localhost:${PORT}`
+        `Server is running on port ${PORT}\nLink: http://localhost:${PORT}`,
       );
     });
   } catch (error) {

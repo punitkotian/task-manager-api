@@ -99,17 +99,17 @@ const logoutUser = asyncHandler(async (req, res) => {
   if (!user) throw new NotFoundError("User not found or deactivated.");
 
   user.refreshTokens = user.refreshTokens.filter(
-    (token) => token !== refreshToken
+    (token) => token !== refreshToken,
   );
   await user.save();
 
   res.clearCookie(
     "accessToken",
-    getCookieOptionsWithoutMaxAge(accessTokenOptions)
+    getCookieOptionsWithoutMaxAge(accessTokenOptions),
   );
   res.clearCookie(
     "refreshToken",
-    getCookieOptionsWithoutMaxAge(refreshTokenOptions)
+    getCookieOptionsWithoutMaxAge(refreshTokenOptions),
   );
 
   APIResponse.success(req, res, {
@@ -136,14 +136,24 @@ const updateUser = asyncHandler(async (req, res) => {
   const { username, email, password } = req.validated.body;
   const userId = req.user._id;
 
-  const updates = {};
+  if (!username && !email && !password) {
+    throw new BadRequestError(
+      "At least one field (username, email or password) must be provided.",
+    );
+  }
+
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new NotFoundError("User not found.");
+  }
 
   if (username) {
     const existingUser = await User.findOne({ username });
     if (existingUser && !existingUser._id.equals(userId)) {
       throw new ConflictError("Username is already taken.");
     }
-    updates.username = username;
+    user.username = username;
   }
 
   if (email) {
@@ -151,17 +161,23 @@ const updateUser = asyncHandler(async (req, res) => {
     if (existingUser && !existingUser._id.equals(userId)) {
       throw new ConflictError("Email is already registered.");
     }
-    updates.email = email;
+
+    user.email = email;
   }
 
   if (password) {
-    updates.password = password;
+    user.password = password;
   }
 
-  const updatedUser = await User.findByIdAndUpdate(userId, updates, {
-    new: true,
-    runValidators: true,
-  }).select("-isActive -createdAt -updatedAt -password -refreshTokens -__v");
+  await user.save();
+
+  const updatedUser = user.toObject();
+  delete updatedUser.password;
+  delete updatedUser.refreshTokens;
+  delete updatedUser.isActive;
+  delete updatedUser.createdAt;
+  delete updatedUser.updatedAt;
+  delete updatedUser.__v;
 
   APIResponse.success(req, res, {
     message: "User profile updated.",
@@ -180,11 +196,11 @@ const deleteUser = asyncHandler(async (req, res) => {
 
   res.clearCookie(
     "accessToken",
-    getCookieOptionsWithoutMaxAge(accessTokenOptions)
+    getCookieOptionsWithoutMaxAge(accessTokenOptions),
   );
   res.clearCookie(
     "refreshToken",
-    getCookieOptionsWithoutMaxAge(refreshTokenOptions)
+    getCookieOptionsWithoutMaxAge(refreshTokenOptions),
   );
 
   APIResponse.success(req, res, {
@@ -227,7 +243,7 @@ const refreshToken = asyncHandler(async (req, res) => {
   const newRefreshToken = generateRefreshToken(payload);
 
   user.refreshTokens = user.refreshTokens.filter(
-    (token) => token !== oldRefreshToken
+    (token) => token !== oldRefreshToken,
   );
   user.refreshTokens.push(newRefreshToken);
   await user.save();
