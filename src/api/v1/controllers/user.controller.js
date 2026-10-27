@@ -52,12 +52,12 @@ const loginUser = asyncHandler(async (req, res) => {
   const user = await User.findOne({ username, isActive: true });
 
   if (!user) {
-    throw new NotFoundError("Account not found or has been deactivated.");
+    throw new UnauthorizedError("Invalid username or password.");
   }
 
   const isPasswordValid = await user.comparePassword(password);
   if (!isPasswordValid) {
-    throw new UnauthorizedError("Incorrect password.");
+    throw new UnauthorizedError("Invalid username or password.");
   }
 
   const payload = {
@@ -167,6 +167,8 @@ const updateUser = asyncHandler(async (req, res) => {
 
   if (password) {
     user.password = password;
+    // Invalidate existing refresh tokens when the password changes.
+    user.refreshTokens = [];
   }
 
   await user.save();
@@ -182,30 +184,6 @@ const updateUser = asyncHandler(async (req, res) => {
   APIResponse.success(req, res, {
     message: "User profile updated.",
     data: updatedUser,
-  });
-});
-
-const deleteUser = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-
-  const user = await User.findByIdAndUpdate(userId, { isActive: false });
-
-  if (!user) {
-    throw new NotFoundError("User account not found.");
-  }
-
-  res.clearCookie(
-    "accessToken",
-    getCookieOptionsWithoutMaxAge(accessTokenOptions),
-  );
-  res.clearCookie(
-    "refreshToken",
-    getCookieOptionsWithoutMaxAge(refreshTokenOptions),
-  );
-
-  APIResponse.success(req, res, {
-    message: "User account deactivated.",
-    statusCode: StatusCodes.OK,
   });
 });
 
@@ -272,6 +250,5 @@ module.exports = {
   logoutUser,
   getMe,
   updateUser,
-  deleteUser,
   refreshToken,
 };

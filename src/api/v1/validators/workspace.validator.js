@@ -9,7 +9,7 @@ const workspaceNameSchema = z
   .max(50, "Name cannot exceed 50 characters")
   .regex(
     /^[a-zA-Z0-9\s_-]+$/,
-    "Only letters, numbers, spaces, hyphens, and underscores are allowed."
+    "Only letters, numbers, spaces, hyphens, and underscores are allowed.",
   );
 
 const descriptionSchema = z
@@ -19,10 +19,12 @@ const descriptionSchema = z
   .optional();
 
 const createWorkspaceSchema = {
-  body: z.object({
-    name: workspaceNameSchema,
-    description: descriptionSchema,
-  }),
+  body: z
+    .object({
+      name: workspaceNameSchema,
+      description: descriptionSchema,
+    })
+    .strict(),
 };
 
 const getWorkspaceSchema = {
@@ -39,12 +41,11 @@ const updateWorkspaceSchema = {
     .object({
       name: workspaceNameSchema.optional(),
       description: descriptionSchema.optional(),
-      regenerateInviteCode: z.boolean().default(false),
     })
     .strict()
     .refine(
       (data) => Object.keys(data).length > 0,
-      "At least one field required"
+      "At least one field required",
     ),
 };
 
@@ -66,10 +67,25 @@ const joinWorkspaceSchema = {
       .string()
       .trim()
       .length(8, "Invite code must be exactly 8 characters")
-      .regex(
-        /^[a-zA-Z0-9_]+$/,
-        "Only letters, numbers, and underscores allowed"
-      ),
+      .regex(/^[a-zA-Z0-9]+$/, "Only letters and numbers allowed"),
+  }),
+};
+
+const transferWorkspaceOwnershipSchema = {
+  params: z.object({
+    workspaceId: mongoIdSchema,
+  }),
+
+  body: z
+    .object({
+      userId: mongoIdSchema,
+    })
+    .strict(),
+};
+
+const leaveWorkspaceSchema = {
+  params: z.object({
+    workspaceId: mongoIdSchema,
   }),
 };
 
@@ -80,4 +96,6 @@ module.exports = {
   deleteWorkspaceSchema,
   joinWorkspaceSchema,
   regenerateInviteCodeSchema,
+  transferWorkspaceOwnershipSchema,
+  leaveWorkspaceSchema,
 };

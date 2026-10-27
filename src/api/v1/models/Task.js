@@ -37,8 +37,13 @@ const TaskSchema = new Schema(
       default: [],
     },
     tags: {
-      type: [String],
-      lowercase: true,
+      type: [
+        {
+          type: String,
+          lowercase: true,
+          trim: true,
+        },
+      ],
       default: [],
     },
     startAt: {
@@ -75,7 +80,7 @@ const TaskSchema = new Schema(
       default: 0,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("Task", TaskSchema);

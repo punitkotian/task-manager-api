@@ -7,6 +7,8 @@ const {
   deleteWorkspace,
   joinWorkspace,
   regenerateInviteCode,
+  leaveWorkspace,
+  transferWorkspaceOwnership,
 } = require("../controllers/workspace.controller");
 
 const { authenticateToken } = require("../../../middleware/auth.middleware");
@@ -18,45 +20,59 @@ const {
   getWorkspaceSchema,
   deleteWorkspaceSchema,
   regenerateInviteCodeSchema,
+  transferWorkspaceOwnershipSchema,
+  leaveWorkspaceSchema,
 } = require("../validators/workspace.validator");
+
 const router = express.Router();
 
 router.post(
   "/",
   authenticateToken,
   validate(createWorkspaceSchema),
-  createWorkspace
+  createWorkspace,
 );
 router.get("/", authenticateToken, getWorkspaces);
 router.get(
   "/:workspaceId",
   authenticateToken,
   validate(getWorkspaceSchema),
-  getWorkspace
+  getWorkspace,
 );
-router.put(
+router.patch(
   "/:workspaceId",
   authenticateToken,
   validate(updateWorkspaceSchema),
-  updateWorkspace
+  updateWorkspace,
+);
+router.patch(
+  "/:workspaceId/ownership",
+  authenticateToken,
+  validate(transferWorkspaceOwnershipSchema),
+  transferWorkspaceOwnership,
 );
 router.delete(
   "/:workspaceId",
   authenticateToken,
   validate(deleteWorkspaceSchema),
-  deleteWorkspace
+  deleteWorkspace,
 );
-
+router.delete(
+  "/:workspaceId/leave",
+  authenticateToken,
+  validate(leaveWorkspaceSchema),
+  leaveWorkspace,
+);
 router.post(
-  "/:workspaceId/invite-code",
+  "/:workspaceId/inviteCode",
   authenticateToken,
   validate(regenerateInviteCodeSchema),
-  regenerateInviteCode
+  regenerateInviteCode,
 );
 router.post(
   "/join/:inviteCode",
   authenticateToken,
   validate(joinWorkspaceSchema),
-  joinWorkspace
+  joinWorkspace,
 );
 module.exports = router;

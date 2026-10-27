@@ -24,4 +24,6 @@ const WorkspaceSchema = new Schema(
   { timestamps: true },
 );
 
+WorkspaceSchema.index({ inviteCode: 1 }, { unique: true });
+
 module.exports = mongoose.model("Workspace", WorkspaceSchema);

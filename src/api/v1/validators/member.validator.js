@@ -1,6 +1,6 @@
 const { z } = require("zod");
 const { mongoIdSchema } = require("./common.validator");
-const { RolesList, Roles } = require("../../../config/enums/user");
+const { RolesList, Roles } = require("../../../config/enums/roles");
 
 const getWorkspaceMemberSchema = {
   params: z.object({

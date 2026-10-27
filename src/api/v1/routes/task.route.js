@@ -20,7 +20,7 @@ const router = express.Router({ mergeParams: true });
 router.post("/", authenticateToken, validate(createTaskSchema), createTask);
 router.get("/:taskId", authenticateToken, validate(getTaskSchema), getTask);
 router.get("/", authenticateToken, validate(getTasksSchema), getTasks);
-router.put(
+router.patch(
   "/:taskId",
   authenticateToken,
   validate(updateTaskSchema),

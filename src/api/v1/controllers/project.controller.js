@@ -1,38 +1,27 @@
 const asyncHandler = require("../../../utils/asyncHandler");
 const { StatusCodes } = require("http-status-codes");
 const Project = require("../models/Project");
-const Member = require("../models/Member");
-const Workspace = require("../models/Workspace");
 const APIResponse = require("../../../utils/APIResponse");
-const { NotFoundError, UnauthorizedError } = require("../../../errors");
-const { Roles } = require("../../../config/enums/user");
-
-
-const checkAdmin = async (workspaceId, userId) => {
-  return await Member.findOne({
-    workspace: workspaceId,
-    user: userId,
-    role: Roles.ADMIN,
-  });
-};
-
-const checkMember = async (workspaceId, userId) => {
-  return await Member.findOne({ workspace: workspaceId, user: userId });
-};
+const { NotFoundError } = require("../../../errors");
+const { Permissions } = require("../../../config/enums/permissions");
+const {
+  requirePermission,
+  getAllowedFields,
+  validateAllowedFields,
+} = require("../../../utils/authorization");
 
 const createProject = asyncHandler(async (req, res) => {
   const { workspaceId } = req.validated.params;
   const { name, description, status } = req.validated.body;
   const userId = req.user._id;
 
-  const workspaceExists = await Workspace.exists({ _id: workspaceId });
-  if (!workspaceExists) throw new NotFoundError("Workspace not found");
-
-  const isAdmin = await checkAdmin(workspaceId, userId);
-  if (!isAdmin)
-    throw new UnauthorizedError(
-      "Only admins can create projects in this workspace"
-    );
+  const { role: requesterRole } = await requirePermission(
+    workspaceId,
+    userId,
+    Permissions.PROJECT.CREATE,
+  );
+  const allowedFields = getAllowedFields(requesterRole, "PROJECT", "CREATE");
+  validateAllowedFields(req.validated.body, allowedFields);
 
   const project = await Project.create({
     name,
@@ -53,15 +42,18 @@ const getProject = asyncHandler(async (req, res) => {
   const { projectId, workspaceId } = req.validated.params;
   const userId = req.user._id;
 
-  const isMember = await checkMember(workspaceId, userId);
-  if (!isMember)
-    throw new UnauthorizedError("Access denied: not a workspace member");
+  await requirePermission(workspaceId, userId, Permissions.PROJECT.VIEW);
 
-  const project = await Project.findById(projectId)
+  const project = await Project.findOne({
+    _id: projectId,
+    workspace: workspaceId,
+  })
     .populate("createdBy", "username email")
     .populate("workspace", "name description");
 
-  if (!project) throw new NotFoundError("Project not found");
+  if (!project) {
+    throw new NotFoundError("Project not found.");
+  }
 
   APIResponse.success(req, res, {
     message: "Project retrieved successfully",
@@ -71,19 +63,35 @@ const getProject = asyncHandler(async (req, res) => {
 
 const updateProject = asyncHandler(async (req, res) => {
   const { workspaceId, projectId } = req.validated.params;
-  const { name, description, status } = req.validated.body;
+  const updates = req.validated.body;
   const userId = req.user._id;
 
-  const isAdmin = await checkAdmin(workspaceId, userId);
-  if (!isAdmin) throw new UnauthorizedError("Only admins can update projects");
-
-  const updatedProject = await Project.findByIdAndUpdate(
-    projectId,
-    { name, description, status },
-    { new: true, runValidators: true }
+  const { role: requesterRole } = await requirePermission(
+    workspaceId,
+    userId,
+    Permissions.PROJECT.UPDATE,
   );
 
-  if (!updatedProject) throw new NotFoundError("Project not found");
+  const allowedFields = getAllowedFields(requesterRole, "PROJECT", "UPDATE");
+  validateAllowedFields(updates, allowedFields);
+
+  const updatedProject = await Project.findOneAndUpdate(
+    {
+      _id: projectId,
+      workspace: workspaceId,
+    },
+    {
+      $set: updates,
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
+
+  if (!updatedProject) {
+    throw new NotFoundError("Project not found.");
+  }
 
   APIResponse.success(req, res, {
     message: "Project updated successfully",
@@ -95,11 +103,16 @@ const deleteProject = asyncHandler(async (req, res) => {
   const { workspaceId, projectId } = req.validated.params;
   const userId = req.user._id;
 
-  const isAdmin = await checkAdmin(workspaceId, userId);
-  if (!isAdmin) throw new UnauthorizedError("Only admins can delete projects");
+  await requirePermission(workspaceId, userId, Permissions.PROJECT.DELETE);
 
-  const deletedProject = await Project.findByIdAndDelete(projectId);
-  if (!deletedProject) throw new NotFoundError("Project not found");
+  const deletedProject = await Project.findOneAndDelete({
+    _id: projectId,
+    workspace: workspaceId,
+  });
+
+  if (!deletedProject) {
+    throw new NotFoundError("Project not found.");
+  }
 
   APIResponse.success(req, res, {
     message: "Project deleted successfully",
@@ -109,33 +122,79 @@ const deleteProject = asyncHandler(async (req, res) => {
 const getProjects = asyncHandler(async (req, res) => {
   const { workspaceId } = req.validated.params;
   const userId = req.user._id;
-  const { tags, status, name, page = 1, limit = 10 } = req.validated.query;
+  const {
+    status,
+    name,
+    createdBy,
+    createdFrom,
+    createdTo,
+    updatedFrom,
+    updatedTo,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.validated.query;
 
-  const isMember = await checkMember(workspaceId, userId);
-  if (!isMember)
-    throw new UnauthorizedError("Access denied: not a workspace member");
+  await requirePermission(workspaceId, userId, Permissions.PROJECT.VIEW);
 
-  const filter = { workspace: workspaceId };
-  if (status) filter.status = status;
-  if (Array.isArray(tags) && tags.length > 0) {
-    filter.tags = { $all: tags };
+  const filter = {
+    workspace: workspaceId,
+  };
+
+  if (status) {
+    filter.status = status;
   }
-  if (name) filter.name = { $regex: name, $options: "i" };
+
+  if (name) {
+    filter.name = {
+      $regex: name,
+      $options: "i",
+    };
+  }
+
+  if (createdBy) {
+    filter.createdBy = createdBy;
+  }
+
+  if (createdFrom || createdTo) {
+    filter.createdAt = {};
+
+    if (createdFrom) {
+      filter.createdAt.$gte = createdFrom;
+    }
+
+    if (createdTo) {
+      filter.createdAt.$lte = createdTo;
+    }
+  }
+
+  if (updatedFrom || updatedTo) {
+    filter.updatedAt = {};
+
+    if (updatedFrom) {
+      filter.updatedAt.$gte = updatedFrom;
+    }
+
+    if (updatedTo) {
+      filter.updatedAt.$lte = updatedTo;
+    }
+  }
 
   const skip = (page - 1) * limit;
 
   const [projects, totalItems] = await Promise.all([
     Project.find(filter)
       .populate("createdBy", "username email")
+      .populate("workspace", "name description")
       .skip(skip)
       .limit(limit)
-      .sort({ createdAt: -1 }),
+      .sort({
+        [sortBy]: sortOrder === "asc" ? 1 : -1,
+      }),
+
     Project.countDocuments(filter),
   ]);
-
-  if (!projects.length) {
-    throw new NotFoundError("No projects found in this workspace");
-  }
 
   APIResponse.pagination(req, res, {
     message: "Projects retrieved successfully",

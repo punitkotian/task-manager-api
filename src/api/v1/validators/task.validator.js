@@ -41,6 +41,18 @@ const dateOrNullSchema = z
   }, z.date().nullable())
   .optional();
 
+const validateTaskDates = (data, ctx) => {
+  const { startAt, endAt } = data;
+
+  if (startAt && endAt && endAt <= startAt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endAt"],
+      message: "End date must be after start date",
+    });
+  }
+};
+
 const createTaskSchema = {
   params: z.object({
     workspaceId: mongoIdSchema,
@@ -64,7 +76,8 @@ const createTaskSchema = {
         .max(100, "Must be ≤ 100")
         .default(0),
     })
-    .strict(),
+    .strict()
+    .superRefine(validateTaskDates),
 };
 
 const updateTaskSchema = {
@@ -92,6 +105,7 @@ const updateTaskSchema = {
         .optional(),
     })
     .strict()
+    .superRefine(validateTaskDates)
     .refine((data) => Object.keys(data).length > 0, {
       message: "At least one field must be provided",
     }),
@@ -110,6 +124,7 @@ const getTasksSchema = {
   }),
   query: z
     .object({
+      name: z.string().trim().min(1).optional(),
       project: mongoIdSchema.optional(),
       assignedTo: mongoIdSchema.optional(),
       status: z.enum(TaskStatusList).optional(),
@@ -117,15 +132,24 @@ const getTasksSchema = {
       tags: z
         .string()
         .trim()
-        .regex(/^[^,]+(,[^,]+)*$/, "Tags must be comma‑separated")
+        .regex(/^[^,]+(,[^,]+)*$/, "Tags must be comma-separated")
         .transform((s) => s.split(",").map((t) => t.trim()))
+        .pipe(z.array(z.string().min(1, "Tags cannot be empty")))
         .optional(),
-      page: z
-        .preprocess((val) => parseInt(String(val), 10), z.number().int().min(1))
-        .default(1),
-      limit: z
-        .preprocess((val) => parseInt(String(val), 10), z.number().int().min(1))
-        .default(10),
+
+      createdFrom: z.coerce.date().optional(),
+      createdTo: z.coerce.date().optional(),
+      updatedFrom: z.coerce.date().optional(),
+      updatedTo: z.coerce.date().optional(),
+
+      sortBy: z
+        .enum(["name", "createdAt", "updatedAt", "status", "priority"])
+        .default("createdAt"),
+
+      sortOrder: z.enum(["asc", "desc"]).default("desc"),
+
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce.number().int().min(1).max(100).default(10),
     })
     .strict(),
 };

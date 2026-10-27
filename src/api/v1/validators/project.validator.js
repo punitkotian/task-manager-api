@@ -9,7 +9,7 @@ const projectNameSchema = z
   .max(50, "Name cannot exceed 50 characters")
   .regex(
     /^[a-zA-Z0-9\s_-]+$/,
-    "Only letters, numbers, spaces, hyphens, and underscores are allowed."
+    "Only letters, numbers, spaces, hyphens, and underscores are allowed.",
   );
 
 const descriptionSchema = z
@@ -40,15 +40,34 @@ const getProjectsSchema = {
   params: z.object({
     workspaceId: mongoIdSchema,
   }),
+
   query: z
     .object({
       status: z.enum(ProjectStatusList).optional(),
-      name: projectNameSchema.optional(),
+      name: z.string().trim().min(1).optional(),
+      createdBy: mongoIdSchema.optional(),
+
+      createdFrom: z.coerce.date().optional(),
+      createdTo: z.coerce.date().optional(),
+
+      updatedFrom: z.coerce.date().optional(),
+      updatedTo: z.coerce.date().optional(),
+
+      sortBy: z
+        .enum(["name", "createdAt", "updatedAt", "status"])
+        .default("createdAt"),
+
+      sortOrder: z.enum(["asc", "desc"]).default("desc"),
+
       page: z
         .preprocess((val) => parseInt(String(val), 10), z.number().min(1))
         .default(1),
+
       limit: z
-        .preprocess((val) => parseInt(String(val), 10), z.number().min(1))
+        .preprocess(
+          (val) => parseInt(String(val), 10),
+          z.number().min(1).max(100),
+        )
         .default(10),
     })
     .strict(),
@@ -61,14 +80,14 @@ const updateProjectSchema = {
   }),
   body: z
     .object({
-      name: projectNameSchema.optional(),
+      name: z.string().trim().min(1).optional(),
       description: descriptionSchema,
       status: z.enum(ProjectStatusList).optional(),
     })
     .strict()
     .refine(
       (data) => Object.keys(data).length > 0,
-      "At least one field required"
+      "At least one field required",
     ),
 };
 

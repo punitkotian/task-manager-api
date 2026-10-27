@@ -4,7 +4,6 @@ const {
   logoutUser,
   getMe,
   updateUser,
-  deleteUser,
   refreshToken,
 } = require("../controllers/user.controller");
 
@@ -25,7 +24,6 @@ router.post("/refresh", refreshToken);
 router
   .route("/me")
   .get(authenticateToken, getMe)
-  .put(authenticateToken, validate(updateUserSchema), updateUser)
-  .delete(authenticateToken, deleteUser);
+  .patch(authenticateToken, validate(updateUserSchema), updateUser)
 
 module.exports = router;

@@ -24,7 +24,7 @@ router.get(
   validate(getWorkspaceMembersSchema),
   getWorkspaceMembers,
 );
-router.put(
+router.post(
   "/",
   authenticateToken,
   validate(addMemberSchema),
@@ -36,7 +36,7 @@ router.get(
   validate(getWorkspaceMemberSchema),
   getWorkspaceMember,
 );
-router.put(
+router.patch(
   "/:memberId",
   authenticateToken,
   validate(updateMemberSchema),

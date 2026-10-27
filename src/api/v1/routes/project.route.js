@@ -30,7 +30,7 @@ router.get(
   validate(getProjectSchema),
   getProject
 );
-router.put(
+router.patch(
   "/:projectId",
   authenticateToken,
   validate(updateProjectSchema),

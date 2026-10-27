@@ -1,52 +1,50 @@
 const { StatusCodes } = require("http-status-codes");
+
 const Workspace = require("../models/Workspace");
 const Member = require("../models/Member");
 const Project = require("../models/Project");
 const Task = require("../models/Task");
-const User = require("../models/User");
 
 const APIResponse = require("../../../utils/APIResponse");
 const asyncHandler = require("../../../utils/asyncHandler");
+
 const {
   NotFoundError,
   BadRequestError,
-  UnauthorizedError,
+  ForbiddenError,
 } = require("../../../errors");
-const { Roles } = require("../../../config/enums/user");
 
+const { Roles } = require("../../../config/enums/roles");
+const { Permissions } = require("../../../config/enums/permissions");
 
-const generateInviteCode = (length = 8) => {
-  const chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  return Array.from(
-    { length },
-    () => chars[Math.floor(Math.random() * chars.length)]
-  ).join("");
-};
+const {
+  requirePermission,
+  getAllowedFields,
+  validateAllowedFields,
+} = require("../../../utils/authorization");
+const generateUniqueInviteCode = require("../../../utils/generateUniqueInviteCode");
+
 
 const createWorkspace = asyncHandler(async (req, res) => {
   const { name, description } = req.validated.body;
   const userId = req.user._id;
 
-  const user = await User.findById(userId);
-  if (!user) {
-    throw new NotFoundError("User not found.");
-  }
+  const inviteCode = await generateUniqueInviteCode();
 
   const workspace = await Workspace.create({
     name,
     description,
     owner: userId,
-    inviteCode: generateInviteCode(),
+    inviteCode,
   });
 
   await Member.create({
-    user: userId,
     workspace: workspace._id,
-    role: Roles.ADMIN,
+    user: userId,
+    role: Roles.OWNER,
   });
 
-  APIResponse.success(req, res, {
+  return APIResponse.success(req, res, {
     message: "Workspace created successfully.",
     statusCode: StatusCodes.CREATED,
     data: workspace,
@@ -57,64 +55,52 @@ const getWorkspace = asyncHandler(async (req, res) => {
   const { workspaceId } = req.validated.params;
   const userId = req.user._id;
 
-  const membership = await Member.findOne({
-    workspace: workspaceId,
-    user: userId,
-  });
-  if (!membership) {
-    throw new UnauthorizedError(
-      "Access denied. You are not a member of this workspace."
-    );
-  }
-
-  
-  const workspace = await Workspace.findById(workspaceId).populate(
-    "owner",
-    "name email"
+  const { workspace, role } = await requirePermission(
+    workspaceId,
+    userId,
+    Permissions.WORKSPACE.VIEW,
   );
-  if (!workspace) {
-    throw new NotFoundError("Workspace not found.");
-  }
 
-  APIResponse.success(req, res, {
+  await workspace.populate("owner", "username email");
+
+  const data = {
+    ...workspace.toObject(),
+    role,
+  };
+
+  return APIResponse.success(req, res, {
     message: "Workspace fetched successfully.",
-    data: workspace,
+    data,
   });
 });
 
 const updateWorkspace = asyncHandler(async (req, res) => {
-  const { name, description, regenerateInviteCode } = req.validated.body;
+  const { name, description } = req.validated.body;
   const { workspaceId } = req.validated.params;
   const userId = req.user._id;
-  const updateFields = { name, description };
 
-  if (regenerateInviteCode) {
-    updateFields.inviteCode = generateInviteCode();
-  }
-
-  const isAdmin = await Member.findOne({
-    user: userId,
-    workspace: workspaceId,
-    role: Roles.ADMIN,
-  });
-
-  if (!isAdmin) {
-    throw new UnauthorizedError("Only admins can update the workspace.");
-  }
-
-  const updatedWorkspace = await Workspace.findByIdAndUpdate(
+  const { workspace, role } = await requirePermission(
     workspaceId,
-    updateFields,
-    { new: true, runValidators: true }
+    userId,
+    Permissions.WORKSPACE.UPDATE,
   );
 
-  if (!updatedWorkspace) {
-    throw new NotFoundError("Workspace not found.");
+  const allowedFields = getAllowedFields(role, "WORKSPACE", "UPDATE");
+  validateAllowedFields(req.validated.body, allowedFields);
+
+  if (name !== undefined) {
+    workspace.name = name;
   }
+
+  if (description !== undefined) {
+    workspace.description = description;
+  }
+
+  await workspace.save();
 
   APIResponse.success(req, res, {
     message: "Workspace updated successfully.",
-    data: updatedWorkspace,
+    data: workspace,
   });
 });
 
@@ -122,31 +108,20 @@ const regenerateInviteCode = asyncHandler(async (req, res) => {
   const { workspaceId } = req.validated.params;
   const userId = req.user._id;
 
-  const isAdmin = await Member.findOne({
-    user: userId,
-    workspace: workspaceId,
-    role: Roles.ADMIN,
-  });
-  if (!isAdmin) {
-    throw new UnauthorizedError("Only admins can regenerate the invite code.");
-  }
-
-  const updateWorkspace = await Workspace.findByIdAndUpdate(
+  const { workspace } = await requirePermission(
     workspaceId,
-    {
-      inviteCode: generateInviteCode(),
-    },
-    { new: true, runValidators: true }
+    userId,
+    Permissions.WORKSPACE.MANAGE_INVITE_CODE,
   );
 
-  if (!updateWorkspace) {
-    throw new NotFoundError("Workspace not found");
-  }
+  workspace.inviteCode = await generateUniqueInviteCode(workspace._id);
 
-  APIResponse.success(req, res, {
-    message: "Invite code regenerated",
+  await workspace.save();
+
+  return APIResponse.success(req, res, {
+    message: "Invite code regenerated successfully.",
     data: {
-      inviteCode: updateWorkspace.inviteCode,
+      inviteCode: workspace.inviteCode,
     },
   });
 });
@@ -155,15 +130,7 @@ const deleteWorkspace = asyncHandler(async (req, res) => {
   const { workspaceId } = req.validated.params;
   const userId = req.user._id;
 
-  const isAdmin = await Member.findOne({
-    user: userId,
-    workspace: workspaceId,
-    role: Roles.ADMIN,
-  });
-
-  if (!isAdmin) {
-    throw new UnauthorizedError("Only admins can delete a workspace.");
-  }
+  await requirePermission(workspaceId, userId, Permissions.WORKSPACE.DELETE);
 
   const [deletedWorkspace] = await Promise.all([
     Workspace.findByIdAndDelete(workspaceId),
@@ -181,22 +148,26 @@ const deleteWorkspace = asyncHandler(async (req, res) => {
   });
 });
 
-
 const getWorkspaces = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  const [ownedWorkspaces, memberships] = await Promise.all([
-    Workspace.find({ owner: userId }),
-    Member.find({ user: userId }).populate("workspace"),
-  ]);
+  const memberships = await Member.find({ user: userId })
+    .select("workspace role")
+    .populate({
+      path: "workspace",
+      select: "name description owner createdAt updatedAt",
+      populate: {
+        path: "owner",
+        select: "username email",
+      },
+    });
 
-  const workspaces = [
-    ...ownedWorkspaces,
-    ...memberships.map((m) => m.workspace),
-  ].filter(
-    (w, i, self) =>
-      self.findIndex((x) => x._id.toString() === w._id.toString()) === i
-  );
+  const workspaces = memberships
+    .filter((membership) => membership.workspace)
+    .map((membership) => ({
+      ...membership.workspace.toObject(),
+      role: membership.role,
+    }));
 
   APIResponse.success(req, res, {
     message: "Workspaces retrieved successfully.",
@@ -209,8 +180,13 @@ const joinWorkspace = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
   const workspace = await Workspace.findOne({ inviteCode });
+
   if (!workspace) {
     throw new NotFoundError("Invalid invite code.");
+  }
+
+  if (workspace.owner.equals(userId)) {
+    throw new BadRequestError("You are already the owner of this workspace.");
   }
 
   const alreadyMember = await Member.findOne({
@@ -234,6 +210,84 @@ const joinWorkspace = asyncHandler(async (req, res) => {
   });
 });
 
+const transferWorkspaceOwnership = asyncHandler(async (req, res) => {
+  const { workspaceId } = req.validated.params;
+  const { userId: newOwnerId } = req.validated.body;
+  const userId = req.user._id;
+
+  const { workspace, role: requesterRole } = await requirePermission(
+    workspaceId,
+    userId,
+    Permissions.WORKSPACE.CHANGE_OWNERSHIP,
+  );
+
+  if (requesterRole !== Roles.OWNER) {
+    throw new ForbiddenError(
+      "Only the workspace owner can transfer ownership.",
+    );
+  }
+
+  const newOwner = await Member.findOne({
+    workspace: workspaceId,
+    user: newOwnerId,
+  });
+
+  if (!newOwner) {
+    throw new BadRequestError(
+      "The new owner must be a member of this workspace.",
+    );
+  }
+
+  if (newOwner.role === Roles.OWNER) {
+    throw new BadRequestError("This user is already the workspace owner.");
+  }
+
+  const currentOwner = await Member.findOne({
+    workspace: workspaceId,
+    user: userId,
+  });
+
+  if (!currentOwner) {
+    throw new NotFoundError("Current owner membership not found.");
+  }
+
+  currentOwner.role = Roles.ADMIN;
+  newOwner.role = Roles.OWNER;
+
+  await Promise.all([currentOwner.save(), newOwner.save()]);
+
+  workspace.owner = newOwnerId;
+  await workspace.save();
+
+  APIResponse.success(req, res, {
+    message: "Workspace ownership transferred successfully.",
+    data: workspace,
+  });
+});
+
+const leaveWorkspace = asyncHandler(async (req, res) => {
+  const { workspaceId } = req.validated.params;
+  const userId = req.user._id;
+
+  const { member } = await requirePermission(
+    workspaceId,
+    userId,
+    Permissions.MEMBER.LEAVE,
+  );
+
+  if (member.role === Roles.OWNER) {
+    throw new ForbiddenError(
+      "The workspace owner cannot leave the workspace. Transfer ownership first.",
+    );
+  }
+
+  await member.deleteOne();
+
+  APIResponse.success(req, res, {
+    message: "You have left the workspace successfully.",
+  });
+});
+
 module.exports = {
   createWorkspace,
   getWorkspace,
@@ -242,4 +296,6 @@ module.exports = {
   getWorkspaces,
   joinWorkspace,
   regenerateInviteCode,
+  transferWorkspaceOwnership,
+  leaveWorkspace,
 };
